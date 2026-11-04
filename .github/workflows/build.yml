@@ -1,0 +1,21 @@
+name: Build and verify
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore SvdStudio.sln
+      - name: Build
+        run: dotnet build SvdStudio.sln --configuration Release --no-restore
+      - name: Verify numerical behavior
+        run: dotnet run --project SvdStudio.TestRunner/SvdStudio.TestRunner.csproj --configuration Release --no-build
