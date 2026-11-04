@@ -1,0 +1,50 @@
+<UserControl x:Class="SvdStudio.Controls.GeometricTransformControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignHeight="350" d:DesignWidth="450">
+    <Border Background="#161B26" BorderBrush="#2E364F" BorderThickness="1" CornerRadius="8" Padding="12">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Top Legend and Vector Badges -->
+            <WrapPanel Grid.Row="0" Margin="0,0,0,10">
+                <Border Background="#1E293B" CornerRadius="4" Padding="6,3" Margin="0,0,8,4">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="10" Height="10" Background="#38BDF8" CornerRadius="2" Margin="0,0,4,0"/>
+                        <TextBlock Text="Unit Circle / v₁, v₂" Foreground="#94A3B8" FontSize="11"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="#1E293B" CornerRadius="4" Padding="6,3" Margin="0,0,8,4">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="10" Height="10" Background="#C084FC" CornerRadius="2" Margin="0,0,4,0"/>
+                        <TextBlock Text="Transformed Ellipse" Foreground="#C084FC" FontSize="11"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="#1E293B" CornerRadius="4" Padding="6,3" Margin="0,0,8,4">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="10" Height="10" Background="#34D399" CornerRadius="2" Margin="0,0,4,0"/>
+                        <TextBlock Text="σ₁ · u₁ (Major Axis)" Foreground="#34D399" FontSize="11"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="#1E293B" CornerRadius="4" Padding="6,3" Margin="0,0,8,4">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="10" Height="10" Background="#FBBF24" CornerRadius="2" Margin="0,0,4,0"/>
+                        <TextBlock Text="σ₂ · u₂ (Minor Axis)" Foreground="#FBBF24" FontSize="11"/>
+                    </StackPanel>
+                </Border>
+            </WrapPanel>
+
+            <!-- Vector Math Canvas -->
+            <Canvas x:Name="TransformCanvas" Grid.Row="1" ClipToBounds="True" SizeChanged="TransformCanvas_SizeChanged"/>
+        </Grid>
+    </Border>
+</UserControl>
