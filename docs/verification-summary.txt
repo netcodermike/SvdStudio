@@ -1,0 +1,27 @@
+SvdStudio local verification - November 3, 2026
+Platform: Windows x64
+Selected SDK: 8.0.427 (global.json rollForward=latestFeature)
+Target frameworks: net8.0 and net8.0-windows
+
+Restore: PASS, using an empty local NuGet source and installed reference packs.
+The inspected projects have no external package references.
+
+Release solution build: PASS, 0 warnings, 0 errors.
+Command:
+dotnet build SvdStudio.sln -c Release --no-restore -m:1 -nr:false -p:UseSharedCompilation=false
+Single-node build with compiler sharing disabled was used because a default
+parallel solution build in this sandbox failed without a diagnostic.
+
+Numerical runner after the .NET 8 build: 251 PASSED, 0 FAILED.
+Command:
+dotnet run --project SvdStudio.TestRunner/SvdStudio.TestRunner.csproj -c Release --no-build
+Full assertion output: verification-log.txt
+
+Original unmodified numerical runner: 114 PASSED, 0 FAILED.
+An initial prepared WPF build under SDK 10.0.403 also passed with 0 warnings
+and 0 errors, while still targeting .NET 8.
+
+PDF: seven pages, rendered with Poppler and visually inspected.
+GUI interaction smoke test: not performed.
+Hosted GitHub Actions: not run; repository has not been published.
+No installer, signed binary, or GitHub release was produced.
