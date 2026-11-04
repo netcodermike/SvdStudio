@@ -1,0 +1,21 @@
+# .NET / Visual Studio
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+TestResults/
+artifacts/
+publish/
+# Local machine / credentials
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.snk
+Thumbs.db
+.DS_Store
