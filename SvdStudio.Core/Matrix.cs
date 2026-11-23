@@ -244,11 +244,18 @@ public sealed class Matrix : IEquatable<Matrix>
     /// </summary>
     public double FrobeniusNorm()
     {
+        var (scale, normalizedNorm) = FrobeniusNormFactors();
+        return scale * normalizedNorm;
+    }
+
+    // Separate the scale so ratios of norms remain representable when the norms overflow.
+    internal (double Scale, double NormalizedNorm) FrobeniusNormFactors()
+    {
         double scale = 0.0, sumSq = 1.0;
         foreach (double value in _data)
         {
             double magnitude = Math.Abs(value);
-            if (!double.IsFinite(magnitude)) return magnitude;
+            if (!double.IsFinite(magnitude)) return (magnitude, 1.0);
             if (magnitude == 0) continue;
             if (scale < magnitude)
             {
@@ -262,7 +269,7 @@ public sealed class Matrix : IEquatable<Matrix>
                 sumSq += ratio * ratio;
             }
         }
-        return scale * Math.Sqrt(sumSq);
+        return (scale, Math.Sqrt(sumSq));
     }
 
     /// <summary>
@@ -340,7 +347,7 @@ public sealed class Matrix : IEquatable<Matrix>
             for (int i = 0; i < data.Length; i++)
             {
                 double weight = rng.NextDouble();
-                data[i] = Math.Clamp(Math.Round((1 - weight) * min + weight * max, 4), min, max);
+                data[i] = Math.Clamp((1 - weight) * min + weight * max, min, max);
             }
         }
         return new Matrix(rows, cols, data);
@@ -467,8 +474,8 @@ public sealed class Matrix : IEquatable<Matrix>
 
     public static string FormatNumber(double val, string format = "G6")
     {
-        // Snap very small values to 0 for clean display
-        if (format != "G17" && Math.Abs(val) < 1e-14) return "0";
+        // Normalize signed zero while preserving nonzero values at every scale.
+        if (val == 0.0) return "0";
         return val.ToString(format, CultureInfo.InvariantCulture);
     }
 

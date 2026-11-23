@@ -24,7 +24,10 @@ public static class MatrixParser
         if (string.IsNullOrWhiteSpace(input))
             throw new FormatException("Input string is empty.");
 
-        string trimmed = input.Trim();
+        // Remove comment lines before testing for MATLAB row separators.
+        string trimmed = Regex.Replace(input.TrimStart('\uFEFF').ReplaceLineEndings("\n"), @"(?m)^[^\S\r\n]*(?:#|//)[^\r\n]*", "")
+            .Trim(' ', '\r', '\n');
+        if (trimmed.TrimStart().StartsWith('[')) trimmed = trimmed.TrimStart();
 
         // 1. JSON 2D array detection: [[ ... ]]
         if (trimmed.StartsWith('[') && trimmed[1..].TrimStart().StartsWith('['))
@@ -35,7 +38,7 @@ public static class MatrixParser
         // 2. MATLAB format detection: contains semicolons or enclosed in [...]
         if (trimmed.StartsWith("[") && trimmed.EndsWith("]"))
         {
-            trimmed = trimmed[1..^1].Trim();
+            trimmed = trimmed[1..^1].Trim(' ', '\r', '\n');
         }
 
         // If semicolons separate rows (MATLAB style)
@@ -50,7 +53,7 @@ public static class MatrixParser
 
     private static Matrix ParseLineByLine(string text)
     {
-        var rawLines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+        var rawLines = text.Split('\n');
         var rows = new List<double[]>();
 
         int expectedCols = -1;
@@ -59,46 +62,18 @@ public static class MatrixParser
         foreach (var rawLine in rawLines)
         {
             lineNum++;
-            var line = rawLine.Trim();
-
-            // Ignore blank lines and comments
-            if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#") || line.StartsWith("//"))
-                continue;
-
-            // Remove trailing commas/semicolons
-            line = line.TrimEnd(',', ';');
-
-            // Split line by comma, tab, or whitespace
-            var tokens = Regex.Split(line, @"[,\t\s]+");
-            var rowVals = new List<double>();
-
-            foreach (var tok in tokens)
-            {
-                if (string.IsNullOrWhiteSpace(tok)) continue;
-
-                if (!double.TryParse(tok, NumberStyles.Float, CultureInfo.InvariantCulture, out double val))
-                {
-                    // Fallback to current culture in case user used comma decimal separator in non-comma delimiter
-                    if (!double.TryParse(tok, NumberStyles.Float, CultureInfo.CurrentCulture, out val))
-                    {
-                        throw new FormatException($"Invalid number '{tok}' at line {lineNum}.");
-                    }
-                }
-                rowVals.Add(val);
-            }
-
-            if (rowVals.Count == 0) continue;
-
+            if (string.IsNullOrWhiteSpace(rawLine)) continue;
+            double[] rowVals = ParseNumbers(rawLine, lineNum, allowLocalizedTabs: true);
             if (expectedCols == -1)
             {
-                expectedCols = rowVals.Count;
+                expectedCols = rowVals.Length;
             }
-            else if (rowVals.Count != expectedCols)
+            else if (rowVals.Length != expectedCols)
             {
-                throw new FormatException($"Row {rows.Count + 1} has {rowVals.Count} columns, expected {expectedCols} columns.");
+                throw new FormatException($"Row {rows.Count + 1} has {rowVals.Length} columns, expected {expectedCols} columns.");
             }
 
-            rows.Add(rowVals.ToArray());
+            rows.Add(rowVals);
         }
 
         if (rows.Count == 0 || expectedCols <= 0)
@@ -115,38 +90,50 @@ public static class MatrixParser
 
         for (int r = 0; r < rowStrings.Length; r++)
         {
-            var rowStr = rowStrings[r].Trim();
+            string rowStr = rowStrings[r];
             if (string.IsNullOrWhiteSpace(rowStr)) continue;
-
-            var tokens = Regex.Split(rowStr, @"[,\t\s]+");
-            var rowVals = new List<double>();
-
-            foreach (var tok in tokens)
-            {
-                if (string.IsNullOrWhiteSpace(tok)) continue;
-                if (!double.TryParse(tok, NumberStyles.Float, CultureInfo.InvariantCulture, out double val))
-                {
-                    throw new FormatException($"Invalid number '{tok}' in row {r + 1}.");
-                }
-                rowVals.Add(val);
-            }
-
-            if (rowVals.Count == 0) continue;
-
+            double[] rowVals = ParseNumbers(rowStr, r + 1, allowLocalizedTabs: false);
             if (expectedCols == -1)
             {
-                expectedCols = rowVals.Count;
+                expectedCols = rowVals.Length;
             }
-            else if (rowVals.Count != expectedCols)
+            else if (rowVals.Length != expectedCols)
             {
-                throw new FormatException($"Row {r + 1} has {rowVals.Count} entries, expected {expectedCols}.");
+                throw new FormatException($"Row {r + 1} has {rowVals.Length} entries, expected {expectedCols}.");
             }
 
-            rows.Add(rowVals.ToArray());
+            rows.Add(rowVals);
         }
 
         if (rows.Count == 0) throw new FormatException("No valid matrix entries found.");
         return new Matrix(rows.ToArray());
+    }
+
+    private static double[] ParseNumbers(string input, int row, bool allowLocalizedTabs)
+    {
+        string line = input.Trim(' ', '\r', '\n');
+        bool hasTabs = line.Contains('\t');
+        bool localizedTabs = allowLocalizedTabs && hasTabs
+            && CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator == ",";
+        string[] fields = hasTabs ? line.Split('\t') : line.Split(',');
+        if (Array.Exists(fields, string.IsNullOrWhiteSpace)
+            || (hasTabs && !localizedTabs && line.Contains(',') && Array.Exists(line.Split(','), string.IsNullOrWhiteSpace)))
+            throw new FormatException($"Missing number in row {row}.");
+
+        string pattern = localizedTabs ? @"\s+" : @"[,\s]+";
+        var tokens = Regex.Split(line.Trim(), pattern);
+        var values = new double[tokens.Length];
+        for (int i = 0; i < tokens.Length; i++)
+        {
+            var token = tokens[i];
+            if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out double value)
+                && !(localizedTabs && double.TryParse(token, NumberStyles.Float, CultureInfo.CurrentCulture, out value)))
+                throw new FormatException($"Invalid number '{token}' in row {row}.");
+            if (!double.IsFinite(value))
+                throw new FormatException($"Number '{token}' in row {row} is outside the finite double-precision range.");
+            values[i] = value;
+        }
+        return values;
     }
 
     private static Matrix ParseJson(string json)

@@ -24,15 +24,24 @@ public static class SvdAlgorithm
         if (matrix == null) throw new ArgumentNullException(nameof(matrix));
         if (customTolerance is double tolerance && (!double.IsFinite(tolerance) || tolerance < 0))
             throw new ArgumentOutOfRangeException(nameof(customTolerance), "Tolerance must be finite and non-negative.");
+        double maxMagnitude = 0.0;
         for (int row = 0; row < matrix.Rows; row++)
             for (int col = 0; col < matrix.Columns; col++)
-                if (!double.IsFinite(matrix[row, col]))
+            {
+                double value = matrix[row, col];
+                if (!double.IsFinite(value))
                     throw new ArgumentException("Matrix entries must be finite real numbers.", nameof(matrix));
+                maxMagnitude = Math.Max(maxMagnitude, Math.Abs(value));
+            }
 
         var stopwatch = Stopwatch.StartNew();
 
         int m = matrix.Rows;
         int n = matrix.Columns;
+        // Leave headroom for transformations and keep tiny input clear of QR's underflow cutoff.
+        // Shifting only to a safe boundary preserves more of a mixed-scale matrix than scaling to 1.
+        int exponent = maxMagnitude == 0.0 ? 0 : Math.ILogB(maxMagnitude);
+        int inputShift = Math.Clamp(exponent, -850, 960) - exponent;
 
         // If m < n, utilize transposition duality:
         // A = U * S * V^T  <=>  A^T = V * S^T * U^T
@@ -43,7 +52,7 @@ public static class SvdAlgorithm
             var aTransposed = matrix.Transpose();
             // Notice: For thin SVD of A (m x n, m < n), U is m x m, S is m x m, VT is m x n.
             // For full SVD of A, U is m x m, S is m x n, VT is n x n.
-            var resTransposed = DecomposeCore(aTransposed, fullSvd: !economy);
+            var resTransposed = DecomposeCore(aTransposed, fullSvd: !economy, inputShift);
 
             stopwatch.Stop();
 
@@ -53,7 +62,6 @@ public static class SvdAlgorithm
 
             // Construct S_a
             Matrix s_a;
-            int p = Math.Min(m, n);
             if (economy)
             {
                 // Thin SVD: U is m x m, S is m x m, VT is m x n
@@ -72,10 +80,9 @@ public static class SvdAlgorithm
         }
 
         // Here m >= n
-        var result = DecomposeCore(matrix, fullSvd: !economy);
+        var result = DecomposeCore(matrix, fullSvd: !economy, inputShift);
         stopwatch.Stop();
 
-        int minDim = Math.Min(m, n);
         double maxSingular = result.SingularValues.Length > 0 ? result.SingularValues[0] : 0.0;
         double defaultTol = customTolerance ?? ComputeDefaultTolerance(m, n, maxSingular);
 
@@ -101,7 +108,7 @@ public static class SvdAlgorithm
 
     private static double ComputeDefaultTolerance(int m, int n, double maxSingular)
     {
-        return Math.Max(m, n) * Epsilon * Math.Max(maxSingular, 1.0);
+        return Math.Max(m, n) * Epsilon * maxSingular;
     }
 
     private sealed record RawSvd(Matrix U, Matrix V, double[] SingularValues);
@@ -110,13 +117,18 @@ public static class SvdAlgorithm
     /// Core Golub-Kahan-Reinsch SVD algorithm for m >= n.
     /// Computes full U (m x m) and V (n x n).
     /// </summary>
-    private static RawSvd DecomposeCore(Matrix matrix, bool fullSvd)
+    private static RawSvd DecomposeCore(Matrix matrix, bool fullSvd, int inputShift)
     {
         int m = matrix.Rows;
         int n = matrix.Columns;
 
         // Working copy of A
         double[,] a = matrix.ToArray2D();
+        if (inputShift != 0)
+            for (int row = 0; row < m; row++)
+                for (int col = 0; col < n; col++)
+                    a[row, col] = Math.ScaleB(a[row, col], inputShift);
+
 
         int nu = fullSvd ? m : n;
         double[,] u = new double[m, nu];
@@ -260,7 +272,6 @@ public static class SvdAlgorithm
         // Step 4: Main QR iteration loop for the bidiagonal matrix
         int pp = p - 1;
         int iter = 0;
-        double eps = Math.Pow(2.0, -52.0);
         double tiny = Math.Pow(2.0, -966.0);
 
         while (p > 0)
@@ -278,7 +289,7 @@ public static class SvdAlgorithm
             for (k = p - 2; k >= -1; k--)
             {
                 if (k == -1) break;
-                if (Math.Abs(e[k]) <= tiny + eps * (Math.Abs(s[k]) + Math.Abs(s[k + 1])))
+                if (Math.Abs(e[k]) <= tiny + Epsilon * (Math.Abs(s[k]) + Math.Abs(s[k + 1])))
                 {
                     e[k] = 0.0;
                     break;
@@ -296,7 +307,7 @@ public static class SvdAlgorithm
                 {
                     if (ks == k) break;
                     double t = (ks != p ? Math.Abs(e[ks]) : 0.0) + (ks != k + 1 ? Math.Abs(e[ks - 1]) : 0.0);
-                    if (Math.Abs(s[ks]) <= tiny + eps * t)
+                    if (Math.Abs(s[ks]) <= tiny + Epsilon * t)
                     {
                         s[ks] = 0.0;
                         break;
@@ -329,9 +340,7 @@ public static class SvdAlgorithm
                         e[p - 2] = 0.0;
                         for (int j = p - 2; j >= k; j--)
                         {
-                            double t = Hypotenuse(s[j], f);
-                            double cs = s[j] / t;
-                            double sn = f / t;
+                            var (t, cs, sn) = Rotation(s[j], f);
                             s[j] = t;
                             if (j != k)
                             {
@@ -355,9 +364,7 @@ public static class SvdAlgorithm
                         e[k - 1] = 0.0;
                         for (int j = k; j < p; j++)
                         {
-                            double t = Hypotenuse(s[j], f);
-                            double cs = s[j] / t;
-                            double sn = f / t;
+                            var (t, cs, sn) = Rotation(s[j], f);
                             s[j] = t;
                             f = -sn * e[j];
                             e[j] = cs * e[j];
@@ -399,9 +406,7 @@ public static class SvdAlgorithm
                         // Chase the bulge down the diagonal
                         for (int j = k; j < p - 1; j++)
                         {
-                            double t = Hypotenuse(f, g);
-                            double cs = f / t;
-                            double sn = g / t;
+                            var (t, cs, sn) = Rotation(f, g);
                             if (j != k) e[j - 1] = t;
 
                             f = cs * s[j] + sn * e[j];
@@ -416,9 +421,7 @@ public static class SvdAlgorithm
                                 v[i, j] = t;
                             }
 
-                            t = Hypotenuse(f, g);
-                            cs = f / t;
-                            sn = g / t;
+                            (t, cs, sn) = Rotation(f, g);
                             s[j] = t;
                             f = cs * e[j] + sn * s[j + 1];
                             s[j + 1] = -sn * e[j] + cs * s[j + 1];
@@ -492,7 +495,7 @@ public static class SvdAlgorithm
         double[] finalS = new double[minMN];
         Array.Copy(s, finalS, minMN);
 
-        // Final sanity check: guarantee non-negative singular values and strictly sorted
+        // Restore the units of the original matrix after working in a safe range.
         for (int i = 0; i < minMN; i++)
         {
             if (finalS[i] < 0.0)
@@ -500,9 +503,18 @@ public static class SvdAlgorithm
                 finalS[i] = -finalS[i];
                 for (int r = 0; r < m; r++) u[r, i] = -u[r, i];
             }
+            finalS[i] = Math.ScaleB(finalS[i], -inputShift);
+            if (!double.IsFinite(finalS[i]))
+                throw new OverflowException("A singular value exceeds the double-precision range.");
         }
 
         return new RawSvd(new Matrix(u), new Matrix(v), finalS);
+    }
+
+    private static (double Length, double Cosine, double Sine) Rotation(double a, double b)
+    {
+        double length = Hypotenuse(a, b);
+        return length == 0.0 ? (0.0, 1.0, 0.0) : (length, a / length, b / length);
     }
 
     /// <summary>

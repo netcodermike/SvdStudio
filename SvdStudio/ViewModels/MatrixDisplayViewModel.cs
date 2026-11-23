@@ -29,10 +29,10 @@ public sealed class CellViewModel
         // Positive: Cyan/Blue gradient (0 to maxAbs)
         // Negative: Coral/Red gradient (0 to maxAbs)
         // Zero: Subtle dark slate
-        double intensity = maxAbs > 1e-12 ? Math.Min(1.0, Math.Abs(val) / maxAbs) : 0.0;
+        double intensity = maxAbs > 0.0 ? Math.Min(1.0, Math.Abs(val) / maxAbs) : 0.0;
         byte alpha = (byte)(20 + (int)(intensity * 180));
 
-        if (Math.Abs(val) < 1e-12)
+        if (val == 0.0)
         {
             BackgroundBrush = new SolidColorBrush(Color.FromArgb(30, 255, 255, 255));
             ForegroundBrush = new SolidColorBrush(Color.FromRgb(140, 145, 160));

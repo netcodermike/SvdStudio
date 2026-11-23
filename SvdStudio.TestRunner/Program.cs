@@ -28,6 +28,7 @@ internal class Program
         TestPseudoInverse();
         TestEdgeCases();
         TestInputAndScaledDiagnostics();
+        TestExtremeMagnitudeDiagnostics();
 
         Console.WriteLine("====================================================");
         Console.WriteLine($"RESULTS: {_passedCount} PASSED, {_failedCount} FAILED.");
@@ -210,6 +211,28 @@ internal class Program
         // 4. JSON 2D array
         var m4 = MatrixParser.Parse("[[1, 2], [3, 4]]");
         Assert(m4.Rows == 2 && m4.Columns == 2 && m4[1, 1] == 4.0, "Parser: JSON array");
+        var commented = MatrixParser.Parse("1,2\r# This note contains a semicolon;\r3,4");
+        Assert(commented.Rows == 2 && commented.Columns == 2 && commented[1, 1] == 4, "Parser: comments do not select the input format");
+        AssertThrows<FormatException>(() => MatrixParser.Parse("1,,2\n3,,4"), "Reject missing CSV values");
+        AssertThrows<FormatException>(() => MatrixParser.Parse("1\t\t2\n3\t\t4"), "Reject missing TSV values");
+        AssertThrows<FormatException>(() => MatrixParser.Parse("1,2,\n3,4,"), "Reject trailing empty CSV values");
+        AssertThrows<FormatException>(() => MatrixParser.Parse("1\t2\t\n3\t4\t"), "Reject trailing empty TSV values");
+        AssertThrows<FormatException>(() => MatrixParser.Parse("[1 NaN; 3 4]"), "Reject a nonfinite MATLAB value");
+        AssertThrows<FormatException>(() => MatrixParser.Parse("1,Infinity"), "Reject nonfinite CSV input");
+        AssertThrows<FormatException>(() => MatrixParser.Parse("1e400 2"), "Reject overflowing whitespace-delimited number");
+
+        var originalCulture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("de-DE");
+            var localizedTsv = MatrixParser.Parse("1,5\t2,5\n3,5\t4,5");
+            Assert(localizedTsv.Columns == 2 && localizedTsv[1, 0] == 3.5, "Parser: decimal commas in tab-delimited rows");
+            Assert(MatrixParser.Parse("1,2\n3,4").Columns == 2, "Parser: CSV commas remain column separators");
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = originalCulture;
+        }
     }
 
     private static void TestTruncatedApproximation()
@@ -314,8 +337,47 @@ internal class Program
             double tail = Math.Sqrt(sample.SingularValues.Skip(k).Sum(value => value * value));
             Assert(Math.Abs(sample.GetTruncatedApproximation(k).FrobeniusError - tail) < 1e-10, $"Eckart-Young tail formula k={k}");
         }
-        var small = SvdAlgorithm.Decompose(Matrix.Identity(2) * 1e-20);
-        Assert(small.Rank == 0, "Documented absolute floor in default rank tolerance");
-        Assert(SvdAlgorithm.Decompose(Matrix.Identity(2) * 1e-20, customTolerance: 0).Rank == 2, "Explicit tolerance override");
+        var tiny = Matrix.Identity(2) * 1e-20;
+        Assert(SvdAlgorithm.Decompose(tiny).Rank == 2, "Default rank tolerance scales with the input");
+        Assert(SvdAlgorithm.Decompose(tiny, customTolerance: 1e-19).Rank == 0, "Explicit tolerance remains absolute");
+        var narrowRandom = Matrix.Random(2, 3, -1e-6, 1e-6, seed: 5);
+        Assert(narrowRandom.ToArray2D().Cast<double>().Distinct().Count() > 1, "Random floating values retain narrow intervals");
+        Assert(Matrix.FormatNumber(1e-16) != "0" && Matrix.FormatNumber(-0.0) == "0", "Display preserves tiny nonzeros");
+        Assert(MatrixParser.Parse(Matrix.Diagonal(new[] { 1e-15, 1e-15 }).ToCsvString())[0, 0] == 1e-15, "CSV preserves tiny nonzeros");
+    }
+
+    private static void TestExtremeMagnitudeDiagnostics()
+    {
+        foreach (double magnitude in new[] { 1e-300, 1.0, 1e308 })
+        {
+            var matrix = new Matrix(new double[,] { { magnitude, magnitude }, { 0, magnitude } });
+            var result = SvdAlgorithm.Decompose(matrix);
+            double largest = (Math.Sqrt(5.0) + 1.0) / 2.0;
+            Assert(Math.Abs(result.SingularValues[0] / magnitude - largest) < 1e-14, $"Scale-stable largest singular value at {magnitude:E0}");
+            Assert(Math.Abs(result.SingularValues[1] / magnitude - 1.0 / largest) < 1e-14, $"Scale-stable smallest singular value at {magnitude:E0}");
+            Assert(result.ReconstructionErrorFrobenius / matrix.FrobeniusNorm() < 1e-14, $"Scale-stable reconstruction at {magnitude:E0}");
+            Assert(result.Rank == 2 && result.OrthogonalityErrorU < 1e-14 && result.OrthogonalityErrorV < 1e-14, $"Scale-stable rank and orthogonality at {magnitude:E0}");
+        }
+
+        var subnormalColumn = new Matrix(new double[,] { { 3e-309 }, { 3e-309 } });
+        var inverse = SvdAlgorithm.Decompose(subnormalColumn).ComputePseudoInverse();
+        Assert(Math.Abs(inverse[0, 0] * 6e-309 - 1.0) < 3e-15 && Math.Abs(inverse[0, 1] * 6e-309 - 1.0) < 3e-15,
+            "Representable subnormal-input pseudoinverse");
+        AssertThrows<OverflowException>(() => SvdAlgorithm.Decompose(Matrix.Identity(2) * 1e-309).ComputePseudoInverse(),
+            "Reject an unrepresentable pseudoinverse");
+        var unrepresentable = new Matrix(new double[,] { { double.MaxValue, double.MaxValue } });
+        AssertThrows<OverflowException>(() => SvdAlgorithm.Decompose(unrepresentable), "Reject an unrepresentable singular value");
+
+        var mixed = SvdAlgorithm.Decompose(Matrix.Diagonal(new[] { 1e200, 1e200, 1e-200, 1e-200 }));
+        Assert(Math.Abs(mixed.ComputeAbsoluteDeterminant() - 1.0) < 1e-14, "Determinant avoids intermediate product overflow");
+        var singular = SvdAlgorithm.Decompose(Matrix.Diagonal(new[] { 1e200, 1e200, 0.0 }));
+        Assert(singular.ComputeAbsoluteDeterminant() == 0.0, "Exact zero determinant despite preceding huge singular values");
+        Assert(SvdAlgorithm.Decompose(Matrix.Diagonal(new[] { 1.9e-200, 1e-200 })).ComputeAbsoluteDeterminant() == 0.0,
+            "Determinant rounds to zero below the subnormal range");
+
+        var enormous = SvdAlgorithm.Decompose(Matrix.Identity(4) * 1.15e308);
+        var truncated = enormous.GetTruncatedApproximation(1);
+        Assert(double.IsPositiveInfinity(truncated.FrobeniusError) && Math.Abs(truncated.RelativeError - Math.Sqrt(0.75)) < 1e-14,
+            "Truncation reports finite relative error when absolute norms overflow");
     }
 }

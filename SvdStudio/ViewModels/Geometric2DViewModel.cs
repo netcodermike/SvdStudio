@@ -61,17 +61,16 @@ public sealed class Geometric2DViewModel : ObservableObject
 
             VectorV1Text = $"v₁ = [{v1[0]:F3}, {v1[1]:F3}]ᵀ";
             VectorV2Text = $"v₂ = [{v2[0]:F3}, {v2[1]:F3}]ᵀ";
-            VectorU1Text = $"σ₁ · u₁ = [{TransformedU1Point.X:F3}, {TransformedU1Point.Y:F3}]ᵀ";
-            VectorU2Text = $"σ₂ · u₂ = [{TransformedU2Point.X:F3}, {TransformedU2Point.Y:F3}]ᵀ";
+            VectorU1Text = $"σ₁ · u₁ = [{TransformedU1Point.X:G6}, {TransformedU1Point.Y:G6}]ᵀ";
+            VectorU2Text = $"σ₂ · u₂ = [{TransformedU2Point.X:G6}, {TransformedU2Point.Y:G6}]ᵀ";
 
-            double detScaling = Sigma1 * Sigma2;
-            AreaScalingText = $"Area Scaling |det| = σ₁ · σ₂ = {detScaling:F4}";
+            double detScaling = svd.ComputeAbsoluteDeterminant();
+            AreaScalingText = $"Area Scaling |det| = σ₁ · σ₂ = {detScaling:G6}";
 
             // Generate points for the unit circle and ellipse
             const int sampleCount = 120;
             double maxExt = 1.5;
 
-            // Project 2x2 submatrix if dimensions > 2
             double a00 = matrix[0, 0];
             double a01 = matrix[0, 1];
             double a10 = matrix[1, 0];
@@ -94,7 +93,7 @@ public sealed class Geometric2DViewModel : ObservableObject
 
             maxExt = Math.Max(maxExt, Math.Max(Math.Abs(TransformedU1Point.X), Math.Abs(TransformedU1Point.Y)));
             maxExt = Math.Max(maxExt, Math.Max(Math.Abs(TransformedU2Point.X), Math.Abs(TransformedU2Point.Y)));
-            MaxCoordinateExtent = maxExt * 1.25;
+            MaxCoordinateExtent = Math.Min(double.MaxValue, maxExt * 1.25);
         }
         else
         {

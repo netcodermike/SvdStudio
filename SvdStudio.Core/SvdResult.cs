@@ -113,9 +113,10 @@ public sealed class SvdResult
 
         var ak = new Matrix(m, n, akData);
         var diff = OriginalMatrix - ak;
-        double frobeniusError = diff.FrobeniusNorm();
-        double originalNorm = OriginalMatrix.FrobeniusNorm();
-        double relativeError = originalNorm > 0.0 ? frobeniusError / originalNorm : 0.0;
+        var (errorScale, errorNorm) = diff.FrobeniusNormFactors();
+        var (originalScale, originalNorm) = OriginalMatrix.FrobeniusNormFactors();
+        double frobeniusError = errorScale * errorNorm;
+        double relativeError = originalScale == 0.0 ? 0.0 : (errorScale / originalScale) * (errorNorm / originalNorm);
         double energyPercent = GetCumulativeEnergyPercentages()[k - 1];
 
         // Slice Uk, Sk, VkT
@@ -169,6 +170,29 @@ public sealed class SvdResult
     }
 
     /// <summary>
+    /// Estimates the magnitude of the determinant from the singular values of a square matrix.
+    /// </summary>
+    public double ComputeAbsoluteDeterminant()
+    {
+        if (OriginalMatrix.Rows != OriginalMatrix.Columns)
+            throw new InvalidOperationException("Only square matrices have a determinant.");
+
+        double product = 1.0;
+        long exponent = 0;
+        foreach (double sigma in SingularValues)
+        {
+            if (sigma == 0.0) return 0.0;
+            int nextExponent = Math.ILogB(sigma);
+            product *= Math.ScaleB(sigma, -nextExponent);
+            int productShift = Math.ILogB(product);
+            product = Math.ScaleB(product, -productShift);
+            exponent += nextExponent + productShift;
+        }
+
+        return exponent < -1075 ? 0.0 : Math.ScaleB(product, (int)Math.Min(exponent, 1024L));
+    }
+
+    /// <summary>
     /// Computes the Moore-Penrose pseudo-inverse A^+ = sum_{i=1}^r (1 / sigma_i) * v_i * u_i^T.
     /// </summary>
     public Matrix ComputePseudoInverse()
@@ -183,6 +207,7 @@ public sealed class SvdResult
             if (sigma > Tolerance)
             {
                 double invSigma = 1.0 / sigma;
+                bool finiteReciprocal = double.IsFinite(invSigma);
                 var uCol = U.GetColumn(k);
                 var vCol = V.GetColumn(k);
 
@@ -192,12 +217,16 @@ public sealed class SvdResult
                     int offset = i * m;
                     for (int j = 0; j < m; j++)
                     {
-                        pinvData[offset + j] += invSigma * vi * uCol[j];
+                        pinvData[offset + j] += finiteReciprocal
+                            ? invSigma * vi * uCol[j]
+                            : (vi * uCol[j]) / sigma;
                     }
                 }
             }
         }
 
+        if (Array.Exists(pinvData, value => !double.IsFinite(value)))
+            throw new OverflowException("The pseudoinverse exceeds the double-precision range.");
         return new Matrix(n, m, pinvData);
     }
 }

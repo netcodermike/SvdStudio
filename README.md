@@ -90,13 +90,13 @@ For p = min(m,n), economy SVD returns U of size m×p, Σ of size p×p, and Vᵀ 
 The current default rank threshold is:
 
 ```text
-tau = max(m,n) * 2.2204460492503131e-16 * max(sigma_max, 1)
+tau = max(m,n) * 2.2204460492503131e-16 * sigma_max
 rank = count(sigma_i > tau)
 ```
 
-The absolute floor means very small, otherwise full-rank matrices can be classified as rank zero. The core API accepts an explicit non-negative finite `customTolerance`; the UI uses the default. The same threshold controls pseudoinverse truncation and whether the condition estimate is reported as infinity.
+The default threshold is relative to the largest singular value. The core API also accepts an explicit non-negative finite `customTolerance` in the matrix’s original units. The same threshold controls pseudoinverse truncation and whether the condition estimate is reported as infinity.
 
-Accuracy depends on scale, dimensions, and conditioning. No universal absolute error below 1e-14 is promised. Inspect residuals and rescale inputs when appropriate. Extreme finite magnitudes can still overflow or underflow intermediate calculations.
+Accuracy depends on scale, dimensions, and conditioning. The solver shifts extreme coefficients by a power of two before factorization and returns singular values in the original units. It reports singular values and pseudoinverses outside the representable range as errors. The desktop app keeps the decomposition available when only its pseudoinverse is out of range. Very ill-conditioned matrices can still lose small components to floating-point rounding.
 
 ## Verify
 

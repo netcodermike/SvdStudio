@@ -151,9 +151,8 @@ public sealed class MainViewModel : ObservableObject
         {
             if (_svdResult == null || _svdResult.OriginalMatrix.Rows != _svdResult.OriginalMatrix.Columns)
                 return "N/A (Rectangular)";
-            double prod = 1.0;
-            foreach (var s in _svdResult.SingularValues) prod *= s;
-            return $"|det| ≈ {Matrix.FormatNumber(prod, "G5")}";
+            double magnitude = _svdResult.ComputeAbsoluteDeterminant();
+            return $"|det| ≈ {Matrix.FormatNumber(magnitude, "G5")}";
         }
     }
 
@@ -299,7 +298,16 @@ public sealed class MainViewModel : ObservableObject
             _matrixV = new MatrixDisplayViewModel($"Right Singular Vectors V ({_svdResult.V.Rows}×{_svdResult.V.Columns})", _svdResult.V);
             _matrixVT = new MatrixDisplayViewModel($"Right Singular Vectors Transposed Vᵀ ({_svdResult.VT.Rows}×{_svdResult.VT.Columns})", _svdResult.VT);
             _matrixReconstructed = new MatrixDisplayViewModel($"Reconstructed Matrix A' = U · Σ · Vᵀ", _svdResult.U * _svdResult.S * _svdResult.VT);
-            _matrixPInv = new MatrixDisplayViewModel($"Moore-Penrose Pseudo-Inverse A⁺ ({_svdResult.OriginalMatrix.Columns}×{_svdResult.OriginalMatrix.Rows})", _svdResult.ComputePseudoInverse());
+            try
+            {
+                var inverse = _svdResult.ComputePseudoInverse();
+                _matrixPInv = new MatrixDisplayViewModel($"Moore-Penrose Pseudo-Inverse A⁺ ({inverse.Rows}×{inverse.Columns})", inverse);
+            }
+            catch (OverflowException ex)
+            {
+                _matrixPInv = null;
+                ErrorMessage = ex.Message + " The decomposition and its other diagnostics are available.";
+            }
 
             _truncatedSvd = new TruncatedSvdViewModel(_svdResult);
             _geometric2D = new Geometric2DViewModel(_svdResult.OriginalMatrix, _svdResult);
@@ -346,7 +354,7 @@ public sealed class MainViewModel : ObservableObject
     {
         var dlg = new OpenFileDialog
         {
-            Filter = "Matrix / Text Files (*.txt;*.csv;*.tsv;*.dat)|*.txt;*.csv;*.tsv;*.dat|All Files (*.*)|*.*",
+            Filter = "Matrix / Text Files (*.txt;*.csv;*.tsv;*.json;*.dat)|*.txt;*.csv;*.tsv;*.json;*.dat|All Files (*.*)|*.*",
             Title = "Import Matrix File"
         };
 
@@ -421,7 +429,7 @@ public sealed class MainViewModel : ObservableObject
                 sb.AppendLine();
                 sb.AppendLine("--------------------------------------------------------------------------------");
                 sb.AppendLine("MOORE-PENROSE PSEUDO-INVERSE A⁺:");
-                sb.AppendLine(_svdResult.ComputePseudoInverse().ToDelimitedString("\t"));
+                sb.AppendLine(_matrixPInv?.Matrix.ToDelimitedString("\t") ?? "Unavailable: exceeds the double-precision range.");
                 sb.AppendLine("================================================================================");
 
                 File.WriteAllText(dlg.FileName, sb.ToString());

@@ -150,17 +150,17 @@ Householder reflections reduce tall or square input to upper bidiagonal form. Th
 
 ```text
 eps = 2.2204460492503131e-16
-tau = max(m,n) * eps * max(σ1, 1)
+tau = max(m,n) * eps * σ1
 rank = count(σi > tau)
 ```
 
-The max(σ1,1) factor imposes an absolute floor. A matrix such as 1e-20 times the identity can have computed nonzero singular values but default numerical rank zero. The core API accepts a finite, non-negative customTolerance. The UI uses the default. The same threshold is used for pseudoinverse truncation and the finite/infinite condition estimate.
+The default threshold follows the scale of the matrix. The core API accepts a finite, non-negative customTolerance in the original matrix units. The UI uses the default. The same threshold guides pseudoinverse truncation and the condition estimate.
 
 ## Diagnostics and guarantees
 
 The result reports absolute reconstruction residual ||A-UΣVᵀ||F, maximum-entry residual, and orthogonality residuals ||UᵀU-I||F and ||VᵀV-I||F. Relative residuals are more informative when comparing matrices at different scales. Standard numerical analysis relates errors to matrix scale, dimensions, and floating-point precision; it does not justify a universal absolute error promise. [2]
 
-Finite input is required. NaN and infinity are rejected, and an exhausted iteration limit raises an exception. Very large or very small finite values may still overflow or underflow intermediate arithmetic. Energy and relative-error displays use absolute small-value cutoffs and can return conventional 100% or zero values for tiny inputs.
+Finite input is required. The solver rescales extreme inputs by a power of two and raises an exception if it reaches the iteration limit or a singular value exceeds the representable range. Absolute norms can still exceed the double-precision range. Relative errors and energy use scaled quantities to stay informative.
 
 ## Useful invariants
 
