@@ -32,7 +32,7 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
                     <TextBlock Text="Fmt:" FontSize="11" Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,4,0"/>
                     <ComboBox SelectedValue="{Binding NumberFormat, Mode=TwoWay}" SelectedValuePath="Tag"
-                              Background="#0F172A" Foreground="#CBD5E1" BorderBrush="#334155" FontSize="11" Height="24" Width="60">
+                              FontSize="11" Height="24" Width="60">
                         <ComboBoxItem Content="G4" Tag="G4"/>
                         <ComboBoxItem Content="G6" Tag="G6" IsSelected="True"/>
                         <ComboBoxItem Content="F2" Tag="F2"/>

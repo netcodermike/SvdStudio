@@ -9,6 +9,7 @@
         mc:Ignorable="d"
         Title="SVD Studio - Singular Value Decomposition Engine" Height="820" Width="1280"
         MinHeight="650" MinWidth="950"
+        Icon="Assets/SvdStudio.ico"
         Background="#0B0F19" Foreground="#F8FAFC"
         WindowStartupLocation="CenterScreen">
     
@@ -40,7 +41,7 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="SVD Studio" FontSize="18" FontWeight="Bold" Foreground="#F8FAFC"/>
                             <Border Background="#1E293B" CornerRadius="4" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
-                                <TextBlock Text="v1.0 • .NET 8" FontSize="10" FontWeight="Medium" Foreground="#38BDF8"/>
+                                <TextBlock Text="v1.0.1 • .NET 8" FontSize="10" FontWeight="Medium" Foreground="#38BDF8"/>
                             </Border>
                         </StackPanel>
                         <TextBlock Text="Singular Value Decomposition Engine for Any Matrix" FontSize="11" Foreground="#94A3B8"/>
@@ -52,7 +53,7 @@
                     <TextBlock Text="Preset:" Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <ComboBox ItemsSource="{Binding Presets}" SelectedItem="{Binding SelectedPreset, Mode=TwoWay}"
                               DisplayMemberPath="Name" Width="210" Height="28"
-                              Background="#1E2230" Foreground="#E2E8F0" BorderBrush="#334155" FontSize="12" Margin="0,0,16,0"/>
+                              FontSize="12" Margin="0,0,16,0"/>
 
                     <!-- SVD Mode Toggle -->
                     <Border Background="#1E2230" BorderBrush="#334155" BorderThickness="1" CornerRadius="6" Padding="2">
@@ -435,7 +436,7 @@
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                     <TextBlock Text="Inspect Rank-1 Mode:" FontSize="10" Foreground="#94A3B8" Margin="0,0,0,2"/>
                                     <ComboBox ItemsSource="{Binding Rank1ModeNames}" SelectedIndex="{Binding SelectedRank1Index, Mode=TwoWay}"
-                                              Width="160" Height="26" Background="#1E2230" Foreground="#CBD5E1" FontSize="11"/>
+                                              Width="160" Height="26" FontSize="11"/>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -546,7 +547,7 @@
                                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
                                     <TextBlock Text="Pattern:" FontSize="12" Foreground="#94A3B8" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                     <ComboBox ItemsSource="{Binding Presets}" SelectedItem="{Binding SelectedPreset, Mode=TwoWay}"
-                                              Width="160" Height="26" Background="#1E2230" Foreground="#E2E8F0" FontSize="11"/>
+                                              Width="160" Height="26" FontSize="11"/>
                                 </StackPanel>
 
                                 <!-- Compression Slider -->
