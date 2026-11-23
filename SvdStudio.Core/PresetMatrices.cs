@@ -32,7 +32,7 @@ public static class PresetMatrices
             () => new Matrix(new double[,] { { 1, 1.5 }, { 0, 1 } })),
 
         new(
-            "2x2 Non-Symmetric Ellipse",
+            "2x2 Rotated Ellipse",
             "Geometric (2x2)",
             "Stretches and rotates the 2D plane.",
             () => new Matrix(new double[,] { { 3, 1 }, { 1, 2 } })),

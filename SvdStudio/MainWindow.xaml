@@ -41,7 +41,7 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="SVD Studio" FontSize="18" FontWeight="Bold" Foreground="#F8FAFC"/>
                             <Border Background="#1E293B" CornerRadius="4" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
-                                <TextBlock Text="v1.0.1 • .NET 8" FontSize="10" FontWeight="Medium" Foreground="#38BDF8"/>
+                                <TextBlock Text="v1.0.2 • .NET 8" FontSize="10" FontWeight="Medium" Foreground="#38BDF8"/>
                             </Border>
                         </StackPanel>
                         <TextBlock Text="Singular Value Decomposition Engine for Any Matrix" FontSize="11" Foreground="#94A3B8"/>
@@ -60,7 +60,7 @@
                         <StackPanel Orientation="Horizontal">
                             <RadioButton Content="Thin / Economy" IsChecked="{Binding IsEconomy, Mode=TwoWay}"
                                          Foreground="#E2E8F0" FontSize="11" FontWeight="Medium" Margin="6,3" VerticalAlignment="Center"/>
-                            <RadioButton Content="Full SVD" IsChecked="{Binding IsEconomy, Mode=TwoWay, Converter={StaticResource InverseBoolToVis}}"
+                            <RadioButton Content="Full SVD" IsChecked="{Binding IsFullSvd, Mode=TwoWay}"
                                          Foreground="#E2E8F0" FontSize="11" FontWeight="Medium" Margin="6,3" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>

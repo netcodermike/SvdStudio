@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace SvdStudio.Core;
@@ -26,7 +27,7 @@ public static class MatrixParser
         string trimmed = input.Trim();
 
         // 1. JSON 2D array detection: [[ ... ]]
-        if (trimmed.StartsWith("[[") && trimmed.EndsWith("]]"))
+        if (trimmed.StartsWith('[') && trimmed[1..].TrimStart().StartsWith('['))
         {
             return ParseJson(trimmed);
         }
@@ -150,48 +151,27 @@ public static class MatrixParser
 
     private static Matrix ParseJson(string json)
     {
-        // Simple regex matching for 2D numeric arrays [[1, 2], [3, 4]]
-        var rowMatches = Regex.Matches(json, @"\[\s*([^\[\]]+?)\s*\]");
-        var rows = new List<double[]>();
-        int expectedCols = -1;
-
-        foreach (Match match in rowMatches)
+        double[][]? rows;
+        try
         {
-            var content = match.Groups[1].Value;
-            var tokens = content.Split(',', StringSplitOptions.RemoveEmptyEntries);
-            var rowVals = new List<double>();
-
-            foreach (var tok in tokens)
-            {
-                var trimmedTok = tok.Trim();
-                if (double.TryParse(trimmedTok, NumberStyles.Float, CultureInfo.InvariantCulture, out double val))
-                {
-                    rowVals.Add(val);
-                }
-                else
-                {
-                    throw new FormatException($"Invalid number in JSON array: '{trimmedTok}'.");
-                }
-            }
-
-            if (rowVals.Count == 0) continue;
-
-            if (expectedCols == -1)
-            {
-                expectedCols = rowVals.Count;
-            }
-            else if (rowVals.Count != expectedCols)
-            {
-                throw new FormatException($"JSON row {rows.Count + 1} length mismatch: got {rowVals.Count}, expected {expectedCols}.");
-            }
-
-            rows.Add(rowVals.ToArray());
+            rows = JsonSerializer.Deserialize<double[][]>(json);
+        }
+        catch (JsonException ex)
+        {
+            throw new FormatException("Use a JSON array of numeric rows.", ex);
         }
 
-        if (rows.Count == 0)
-            throw new FormatException("No valid rows could be extracted from JSON.");
-
-        return new Matrix(rows.ToArray());
+        if (rows == null || rows.Length == 0 || rows[0] is not { Length: > 0 })
+            throw new FormatException("JSON matrix must contain at least one nonempty row.");
+        int columns = rows[0].Length;
+        for (int row = 0; row < rows.Length; row++)
+        {
+            if (rows[row] == null || rows[row].Length != columns)
+                throw new FormatException($"JSON row {row + 1} must contain exactly {columns} values.");
+            if (Array.Exists(rows[row], n => !double.IsFinite(n)))
+                throw new FormatException($"JSON row {row + 1} contains a nonfinite value.");
+        }
+        return new Matrix(rows);
     }
 
     /// <summary>

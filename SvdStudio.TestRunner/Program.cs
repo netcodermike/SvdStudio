@@ -27,6 +27,7 @@ internal class Program
         TestTruncatedApproximation();
         TestPseudoInverse();
         TestEdgeCases();
+        TestInputAndScaledDiagnostics();
 
         Console.WriteLine("====================================================");
         Console.WriteLine($"RESULTS: {_passedCount} PASSED, {_failedCount} FAILED.");
@@ -254,6 +255,26 @@ internal class Program
         try { action(); Assert(false, name, "Expected exception was not thrown."); }
         catch (T) { Assert(true, name); }
         catch (Exception ex) { Assert(false, name, $"Unexpected {ex.GetType().Name}"); }
+    }
+
+    private static void TestInputAndScaledDiagnostics()
+    {
+        var original = MatrixParser.Parse("[3 1; 2 -4]");
+        Assert((MatrixParser.Parse(original.ToJsonString()) - original).FrobeniusNorm() == 0, "Round-trip exported JSON matrix");
+        Assert(MatrixParser.Parse("[ [3, 1], [2, -4] ]")[1, 1] == -4, "Read JSON with whitespace between brackets");
+        AssertThrows<FormatException>(() => MatrixParser.Parse("[[1], discarded, [2]]"), "Reject malformed JSON between rows");
+        AssertThrows<FormatException>(() => MatrixParser.Parse("[[1], []]"), "Reject empty JSON row");
+        AssertThrows<FormatException>(() => MatrixParser.Parse("[[1e400]]"), "Reject overflowing JSON number");
+        AssertThrows<ArgumentException>(() => Matrix.Random(2, 2, 2, 1), "Reject reversed random limits");
+        AssertThrows<ArgumentException>(() => Matrix.Random(2, 2, .1, .9, integerOnly: true), "Reject integer range without integers");
+        var integers = Matrix.Random(2, 2, .1, 1.5, seed: 2, integerOnly: true);
+        Assert(integers.ToArray2D().Cast<double>().All(value => value == 1), "Integer samples stay within fractional limits");
+        var scaled = new Matrix(new double[,] { { 3e180, 4e180 } });
+        Assert(Math.Abs(scaled.FrobeniusNorm() / 5e180 - 1) < 1e-14, "Frobenius norm avoids squaring overflow");
+        var small = Matrix.Diagonal(new[] { 3e-100, 1e-100 });
+        var truncated = SvdAlgorithm.Decompose(small).GetTruncatedApproximation(1);
+        Assert(Math.Abs(truncated.EnergyPercentage - 90) < 1e-12, "Scaled energy retains expected percentage");
+        Assert(Math.Abs(truncated.RelativeError - 1 / Math.Sqrt(10)) < 1e-12, "Relative error remains valid for small matrices");
     }
 
     private static void TestEdgeCases()

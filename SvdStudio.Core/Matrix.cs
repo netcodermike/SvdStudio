@@ -244,12 +244,25 @@ public sealed class Matrix : IEquatable<Matrix>
     /// </summary>
     public double FrobeniusNorm()
     {
-        double sumSq = 0.0;
-        foreach (var v in _data)
+        double scale = 0.0, sumSq = 1.0;
+        foreach (double value in _data)
         {
-            sumSq += v * v;
+            double magnitude = Math.Abs(value);
+            if (!double.IsFinite(magnitude)) return magnitude;
+            if (magnitude == 0) continue;
+            if (scale < magnitude)
+            {
+                double ratio = scale / magnitude;
+                sumSq = 1.0 + sumSq * ratio * ratio;
+                scale = magnitude;
+            }
+            else
+            {
+                double ratio = magnitude / scale;
+                sumSq += ratio * ratio;
+            }
         }
-        return Math.Sqrt(sumSq);
+        return scale * Math.Sqrt(sumSq);
     }
 
     /// <summary>
@@ -306,12 +319,29 @@ public sealed class Matrix : IEquatable<Matrix>
     /// </summary>
     public static Matrix Random(int rows, int cols, double min = -10.0, double max = 10.0, int? seed = null, bool integerOnly = false)
     {
+        if (rows <= 0 || cols <= 0)
+            throw new ArgumentException("Random matrix dimensions must be positive.");
+        if (!double.IsFinite(min) || !double.IsFinite(max) || min > max)
+            throw new ArgumentException("Enter finite random bounds with minimum no greater than maximum.");
+
         var rng = seed.HasValue ? new Random(seed.Value) : new Random();
-        var data = new double[rows * cols];
-        for (int i = 0; i < data.Length; i++)
+        var data = new double[checked(rows * cols)];
+        if (integerOnly)
         {
-            double val = min + rng.NextDouble() * (max - min);
-            data[i] = integerOnly ? Math.Round(val) : Math.Round(val, 4);
+            const double largestExactInteger = 9_007_199_254_740_991;
+            double lower = Math.Ceiling(min), upper = Math.Floor(max);
+            if (lower > upper || lower < -largestExactInteger || upper > largestExactInteger)
+                throw new ArgumentException("Enter bounds that contain an integer within the exact integer range.");
+            for (int i = 0; i < data.Length; i++)
+                data[i] = rng.NextInt64((long)lower, (long)upper + 1);
+        }
+        else
+        {
+            for (int i = 0; i < data.Length; i++)
+            {
+                double weight = rng.NextDouble();
+                data[i] = Math.Clamp(Math.Round((1 - weight) * min + weight * max, 4), min, max);
+            }
         }
         return new Matrix(rows, cols, data);
     }
@@ -438,7 +468,7 @@ public sealed class Matrix : IEquatable<Matrix>
     public static string FormatNumber(double val, string format = "G6")
     {
         // Snap very small values to 0 for clean display
-        if (Math.Abs(val) < 1e-14) return "0";
+        if (format != "G17" && Math.Abs(val) < 1e-14) return "0";
         return val.ToString(format, CultureInfo.InvariantCulture);
     }
 

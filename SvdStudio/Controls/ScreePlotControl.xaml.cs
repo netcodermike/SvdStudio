@@ -100,7 +100,7 @@ public partial class ScreePlotControl : UserControl
         {
             if (it.Value > maxVal) maxVal = it.Value;
         }
-        if (maxVal < 1e-12) maxVal = 1.0;
+        if (maxVal == 0.0) maxVal = 1.0;
 
         // Draw horizontal grid lines & labels (0%, 25%, 50%, 75%, 100%)
         for (int step = 0; step <= 4; step++)
@@ -124,7 +124,7 @@ public partial class ScreePlotControl : UserControl
             double svLabelVal = ratio * maxVal;
             var svLabel = new TextBlock
             {
-                Text = svLabelVal < 10 ? svLabelVal.ToString("F1") : svLabelVal.ToString("G3"),
+                Text = svLabelVal.ToString("G3", CultureInfo.CurrentCulture),
                 Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)),
                 FontSize = 9,
                 TextAlignment = TextAlignment.Right,

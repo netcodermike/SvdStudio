@@ -31,11 +31,11 @@ public sealed class ImageCompressionViewModel : ObservableObject
     private int _rank = 5;
     private BitmapSource? _originalBitmap;
     private BitmapSource? _reconstructedBitmap;
-    private ImagePresetOption _selectedPreset;
+    private ImagePresetOption? _selectedPreset;
 
     public IReadOnlyList<ImagePresetOption> Presets { get; }
 
-    public ImagePresetOption SelectedPreset
+    public ImagePresetOption? SelectedPreset
     {
         get => _selectedPreset;
         set
@@ -73,7 +73,7 @@ public sealed class ImageCompressionViewModel : ObservableObject
         private set => SetProperty(ref _reconstructedBitmap, value);
     }
 
-    public string ResolutionText => $"{_originalMatrix?.Rows} × {_originalMatrix?.Columns}";
+    public string ResolutionText => $"{_originalMatrix.Columns} × {_originalMatrix.Rows}";
     public string CompressionRatioText { get; private set; } = "-";
     public string StorageSavingsText { get; private set; } = "-";
     public string EnergyText { get; private set; } = "-";
@@ -98,7 +98,7 @@ public sealed class ImageCompressionViewModel : ObservableObject
 
         LoadFileCommand = new RelayCommand(ExecuteLoadFile);
 
-        LoadMatrix(_originalMatrix);
+        UpdateSourceImage();
     }
 
     private void ExecuteLoadFile()
@@ -113,24 +113,8 @@ public sealed class ImageCompressionViewModel : ObservableObject
         {
             try
             {
-                var bi = new BitmapImage();
-                bi.BeginInit();
-                bi.UriSource = new Uri(dlg.FileName);
-                bi.DecodePixelWidth = 64; // Resize to reasonable matrix dimensions
-                bi.EndInit();
-                bi.Freeze();
-
-                var fcb = new FormatConvertedBitmap(bi, PixelFormats.Gray8, null, 0);
-                int w = fcb.PixelWidth;
-                int h = fcb.PixelHeight;
-                byte[] raw = new byte[w * h];
-                fcb.CopyPixels(raw, w, 0);
-
-                var matData = new double[h * w];
-                for (int i = 0; i < raw.Length; i++) matData[i] = raw[i];
-
-                var mat = new Matrix(h, w, matData);
-                LoadMatrix(mat);
+                LoadMatrix(DecodeImage(dlg.FileName));
+                SelectedPreset = null;
             }
             catch (Exception ex)
             {
@@ -139,10 +123,45 @@ public sealed class ImageCompressionViewModel : ObservableObject
         }
     }
 
+    internal static Matrix DecodeImage(string fileName)
+    {
+        const int maxSide = 64;
+        using var stream = File.OpenRead(fileName);
+        var frame = BitmapDecoder.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.OnDemand).Frames[0];
+        int originalWidth = frame.PixelWidth, originalHeight = frame.PixelHeight;
+        stream.Position = 0;
+
+        var bitmap = new BitmapImage();
+        bitmap.BeginInit();
+        bitmap.StreamSource = stream;
+        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        double scale = (double)maxSide / Math.Max(originalWidth, originalHeight);
+        if (scale < 1.0)
+        {
+            bitmap.DecodePixelWidth = Math.Max(1, (int)Math.Round(originalWidth * scale));
+            bitmap.DecodePixelHeight = Math.Max(1, (int)Math.Round(originalHeight * scale));
+        }
+        bitmap.EndInit();
+
+        var grayscale = new FormatConvertedBitmap(bitmap, PixelFormats.Gray8, null, 0);
+        int width = grayscale.PixelWidth, height = grayscale.PixelHeight;
+        var bytes = new byte[width * height];
+        grayscale.CopyPixels(bytes, width, 0);
+        var data = new double[bytes.Length];
+        for (int i = 0; i < bytes.Length; i++) data[i] = bytes[i];
+        return new Matrix(height, width, data);
+    }
+
     public void LoadMatrix(Matrix matrix)
     {
+        var svd = SvdAlgorithm.Decompose(matrix, economy: true);
         _originalMatrix = matrix;
-        _svdResult = SvdAlgorithm.Decompose(_originalMatrix, economy: true);
+        _svdResult = svd;
+        UpdateSourceImage();
+    }
+
+    private void UpdateSourceImage()
+    {
         _rank = Math.Min(Math.Max(1, _svdResult.Rank / 2), _svdResult.SingularValues.Length);
 
         OriginalBitmap = MatrixToBitmap(_originalMatrix);
@@ -167,10 +186,10 @@ public sealed class ImageCompressionViewModel : ObservableObject
         int compressedEntries = _rank * (m + n + 1);
 
         double ratio = (double)compressedEntries / originalEntries * 100.0;
-        double savings = Math.Max(0.0, 100.0 - ratio);
-
         CompressionRatioText = $"{compressedEntries} / {originalEntries} values ({ratio:F1}%)";
-        StorageSavingsText = $"{savings:F1}% Storage Reduction";
+        StorageSavingsText = ratio <= 100
+            ? $"{100 - ratio:F1}% Fewer Stored Values"
+            : $"{ratio - 100:F1}% More Stored Values";
         EnergyText = $"{trunc.EnergyPercentage:F2}% Energy Retained";
         ReconstructionErrorText = $"Frobenius Error: {trunc.FrobeniusError:F2} (Rel: {trunc.RelativeError * 100:F2}%)";
 

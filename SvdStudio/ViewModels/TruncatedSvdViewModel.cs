@@ -70,17 +70,16 @@ public sealed class TruncatedSvdViewModel : ObservableObject
 
         _currentTruncation = _svd.GetTruncatedApproximation(_targetRank);
         _approxDisplay = new MatrixDisplayViewModel($"Rank-{_targetRank} Approximation (A_{_targetRank})", _currentTruncation.Approximation);
-        _diffDisplay = new MatrixDisplayViewModel($"Residual Error Matrix (|A - A_{_targetRank}|)", (_svd.OriginalMatrix - _currentTruncation.Approximation));
+        _diffDisplay = new MatrixDisplayViewModel($"Residual Matrix (A − A_{_targetRank})", _svd.OriginalMatrix - _currentTruncation.Approximation);
 
-        var rank1List = _svd.GetRank1Components();
-        _rank1Display = new MatrixDisplayViewModel($"Rank-1 Mode 1 (σ₁ · u₁ · v₁ᵀ)", rank1List.Count > 0 ? rank1List[0] : Matrix.Zeros(1, 1));
+        _rank1Display = new MatrixDisplayViewModel("Rank-1 Mode 1 (σ₁ · u₁ · v₁ᵀ)", _svd.GetRank1Component(0));
     }
 
     private void UpdateTruncation()
     {
         _currentTruncation = _svd.GetTruncatedApproximation(_targetRank);
         _approxDisplay = new MatrixDisplayViewModel($"Rank-{_targetRank} Approximation (A_{_targetRank})", _currentTruncation.Approximation);
-        _diffDisplay = new MatrixDisplayViewModel($"Residual Error Matrix (|A - A_{_targetRank}|)", (_svd.OriginalMatrix - _currentTruncation.Approximation));
+        _diffDisplay = new MatrixDisplayViewModel($"Residual Matrix (A − A_{_targetRank})", _svd.OriginalMatrix - _currentTruncation.Approximation);
 
         OnPropertyChanged(nameof(FrobeniusError));
         OnPropertyChanged(nameof(RelativeErrorPercent));
@@ -91,14 +90,10 @@ public sealed class TruncatedSvdViewModel : ObservableObject
 
     private void UpdateRank1Display()
     {
-        var rank1List = _svd.GetRank1Components();
-        if (_selectedRank1Index >= 0 && _selectedRank1Index < rank1List.Count)
-        {
-            double sigma = _svd.SingularValues[_selectedRank1Index];
-            _rank1Display = new MatrixDisplayViewModel(
-                $"Rank-1 Mode {_selectedRank1Index + 1} (σ_{_selectedRank1Index + 1} = {Matrix.FormatNumber(sigma, "G4")} · u · vᵀ)",
-                rank1List[_selectedRank1Index]);
-            OnPropertyChanged(nameof(Rank1Display));
-        }
+        double sigma = _svd.SingularValues[_selectedRank1Index];
+        _rank1Display = new MatrixDisplayViewModel(
+            $"Rank-1 Mode {_selectedRank1Index + 1} (σ_{_selectedRank1Index + 1} = {Matrix.FormatNumber(sigma, "G4")} · u · vᵀ)",
+            _svd.GetRank1Component(_selectedRank1Index));
+        OnPropertyChanged(nameof(Rank1Display));
     }
 }

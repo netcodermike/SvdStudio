@@ -7,7 +7,6 @@
     <Application.Resources>
         <!-- Converters -->
         <conv:BoolToVisibilityConverter x:Key="BoolToVis"/>
-        <conv:BoolToVisibilityConverter x:Key="InverseBoolToVis" Invert="True"/>
         <conv:DoubleFormatConverter x:Key="DoubleFormat"/>
         <conv:ConditionNumberConverter x:Key="ConditionNumberFormat"/>
         <conv:NullToVisibilityConverter x:Key="NullToVis"/>

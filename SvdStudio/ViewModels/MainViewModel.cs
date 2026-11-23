@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Text;
 using System.Windows;
+using System.Windows.Input;
 using Microsoft.Win32;
 using SvdStudio.Common;
 using SvdStudio.Core;
@@ -15,7 +16,7 @@ public sealed class SingularValueItem
     public int Index { get; }
     public string Name => $"σ{Index}";
     public double Value { get; }
-    public string FormattedValue => Matrix.FormatNumber(Value, "G6");
+    public string FormattedValue => Value.ToString("G6");
     public double EnergyPercent { get; }
     public double CumulativeEnergyPercent { get; }
     public string FormattedEnergy => $"{EnergyPercent:F2}%";
@@ -28,7 +29,7 @@ public sealed class SingularValueItem
         Value = value;
         EnergyPercent = energy;
         CumulativeEnergyPercent = cumulative;
-        BarHeightNormalized = maxVal > 1e-14 ? Math.Clamp(value / maxVal, 0.01, 1.0) : 0.01;
+        BarHeightNormalized = maxVal > 0 ? value / maxVal : 0;
     }
 }
 
@@ -63,7 +64,7 @@ public sealed class MainViewModel : ObservableObject
     public string InputMatrixText
     {
         get => _inputMatrixText;
-        set => SetProperty(ref _inputMatrixText, value);
+        set => UpdateMatrixInput(value);
     }
 
     public string? ErrorMessage
@@ -91,8 +92,18 @@ public sealed class MainViewModel : ObservableObject
         {
             if (SetProperty(ref _isEconomy, value))
             {
+                OnPropertyChanged(nameof(IsFullSvd));
                 ComputeSvd();
             }
+        }
+    }
+
+    public bool IsFullSvd
+    {
+        get => !IsEconomy;
+        set
+        {
+            if (value) IsEconomy = false;
         }
     }
 
@@ -220,7 +231,7 @@ public sealed class MainViewModel : ObservableObject
         ClearInputCommand = new RelayCommand(() => InputMatrixText = string.Empty);
         GenerateRandomCommand = new RelayCommand(ExecuteGenerateRandom);
         ImportFileCommand = new RelayCommand(ExecuteImportFile);
-        ExportSummaryCommand = new RelayCommand(ExecuteExportSummary);
+        ExportSummaryCommand = new RelayCommand(ExecuteExportSummary, () => _svdResult != null);
 
         // Load default initial matrix: 3x3 Magic Square
         var initial = Presets[3];
@@ -233,13 +244,32 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             var mat = preset.Generator();
-            InputMatrixText = mat.ToDelimitedString("  ", "G5");
+            UpdateMatrixInput(mat.ToDelimitedString("  ", "G17"), keepPreset: true);
             ComputeSvd();
         }
         catch (Exception ex)
         {
             ErrorMessage = $"Failed to load preset: {ex.Message}";
         }
+    }
+
+    private void UpdateMatrixInput(string text, bool keepPreset = false)
+    {
+        if (!SetProperty(ref _inputMatrixText, text, nameof(InputMatrixText))) return;
+        if (!keepPreset) SelectedPreset = null;
+        ErrorMessage = null;
+        ClearResults();
+    }
+
+    private void ClearResults()
+    {
+        if (_svdResult == null) return;
+        _svdResult = null;
+        _matrixA = _matrixU = _matrixS = _matrixV = _matrixVT = _matrixReconstructed = _matrixPInv = null;
+        _truncatedSvd = null;
+        _geometric2D = null;
+        SingularValueItems.Clear();
+        NotifyAllProperties();
     }
 
     public void ComputeSvd()
@@ -276,21 +306,16 @@ public sealed class MainViewModel : ObservableObject
 
             // Populate singular value items
             SingularValueItems.Clear();
-            double totalEnergy = 0.0;
-            foreach (var sv in _svdResult.SingularValues) totalEnergy += sv * sv;
-
-            double maxVal = _svdResult.SingularValues.Length > 0 ? _svdResult.SingularValues[0] : 1.0;
-            double running = 0.0;
+            double maxVal = _svdResult.SingularValues[0];
+            double[] cumulativeEnergy = _svdResult.GetCumulativeEnergyPercentages();
+            double previousEnergy = 0.0;
 
             for (int i = 0; i < _svdResult.SingularValues.Length; i++)
             {
                 double sv = _svdResult.SingularValues[i];
-                double sq = sv * sv;
-                running += sq;
-                double energy = totalEnergy > 1e-15 ? (sq / totalEnergy) * 100.0 : 100.0 / _svdResult.SingularValues.Length;
-                double cumulative = totalEnergy > 1e-15 ? (running / totalEnergy) * 100.0 : 100.0;
-
-                SingularValueItems.Add(new SingularValueItem(i + 1, sv, energy, cumulative, maxVal));
+                double cumulative = maxVal > 0 ? cumulativeEnergy[i] : 0;
+                SingularValueItems.Add(new SingularValueItem(i + 1, sv, cumulative - previousEnergy, cumulative, maxVal));
+                previousEnergy = cumulative;
             }
 
             // Notify UI
@@ -298,15 +323,23 @@ public sealed class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            ClearResults();
             ErrorMessage = $"SVD Computation error: {ex.Message}";
         }
     }
 
     private void ExecuteGenerateRandom()
     {
-        var mat = Matrix.Random(RandomRows, RandomCols, RandomMin, RandomMax, integerOnly: RandomIntegerOnly);
-        InputMatrixText = mat.ToDelimitedString("  ", "G5");
-        ComputeSvd();
+        try
+        {
+            var mat = Matrix.Random(RandomRows, RandomCols, RandomMin, RandomMax, integerOnly: RandomIntegerOnly);
+            InputMatrixText = mat.ToDelimitedString("  ", "G17");
+            ComputeSvd();
+        }
+        catch (ArgumentException ex)
+        {
+            ErrorMessage = ex.Message;
+        }
     }
 
     private void ExecuteImportFile()
@@ -352,7 +385,7 @@ public sealed class MainViewModel : ObservableObject
                 sb.AppendLine("                     SINGULAR VALUE DECOMPOSITION REPORT                        ");
                 sb.AppendLine("================================================================================");
                 sb.AppendLine($"Matrix Dimensions: {MatrixDimensionText}");
-                sb.AppendLine($"Mode: {(IsEconomy ? "Thin / Economy SVD" : "Full SVD")}");
+                sb.AppendLine($"Mode: {(_svdResult.IsEconomy ? "Thin / Economy SVD" : "Full SVD")}");
                 sb.AppendLine($"Numerical Rank: {Rank}");
                 sb.AppendLine($"Condition Number: {ConditionNumber:G6}");
                 sb.AppendLine($"Frobenius Norm: {FrobeniusNorm:G6}");
@@ -427,5 +460,6 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(MatrixPInv));
         OnPropertyChanged(nameof(TruncatedSvd));
         OnPropertyChanged(nameof(Geometric2D));
+        CommandManager.InvalidateRequerySuggested();
     }
 }

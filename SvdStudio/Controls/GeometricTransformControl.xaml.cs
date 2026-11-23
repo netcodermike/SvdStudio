@@ -68,6 +68,7 @@ public partial class GeometricTransformControl : UserControl
         double cy = h / 2.0;
         double maxDim = Math.Min(w, h) / 2.0 - 30.0;
         double extent = Math.Max(1.8, vm.MaxCoordinateExtent);
+        if (!double.IsFinite(extent)) return;
         double scale = maxDim / extent;
 
         // Coordinate axes
@@ -75,9 +76,10 @@ public partial class GeometricTransformControl : UserControl
         var gridBrush = new SolidColorBrush(Color.FromArgb(20, 255, 255, 255));
 
         // Background grid circles
-        for (double r = 1.0; r <= extent; r += 1.0)
+        double gridStep = Math.Max(1.0, Math.Ceiling(extent / 8.0));
+        for (int ring = 1; ring <= 8 && ring * gridStep <= extent; ring++)
         {
-            double pixR = r * scale;
+            double pixR = ring * gridStep * scale;
             var circle = new Ellipse
             {
                 Width = pixR * 2,

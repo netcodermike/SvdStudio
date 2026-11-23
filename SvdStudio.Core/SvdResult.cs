@@ -115,19 +115,8 @@ public sealed class SvdResult
         var diff = OriginalMatrix - ak;
         double frobeniusError = diff.FrobeniusNorm();
         double originalNorm = OriginalMatrix.FrobeniusNorm();
-        double relativeError = originalNorm > 1e-14 ? frobeniusError / originalNorm : 0.0;
-
-        // Energy (variance) retained: sum_{i=1}^k sigma_i^2 / sum_{i=1}^p sigma_i^2
-        double totalEnergy = 0.0;
-        double keptEnergy = 0.0;
-        for (int i = 0; i < p; i++)
-        {
-            double sq = SingularValues[i] * SingularValues[i];
-            totalEnergy += sq;
-            if (i < k) keptEnergy += sq;
-        }
-
-        double energyPercent = totalEnergy > 1e-15 ? (keptEnergy / totalEnergy) * 100.0 : 100.0;
+        double relativeError = originalNorm > 0.0 ? frobeniusError / originalNorm : 0.0;
+        double energyPercent = GetCumulativeEnergyPercentages()[k - 1];
 
         // Slice Uk, Sk, VkT
         var uk = U.Submatrix(0, U.Rows, 0, k);
@@ -144,14 +133,12 @@ public sealed class SvdResult
     {
         var list = new List<Matrix>(SingularValues.Length);
         for (int i = 0; i < SingularValues.Length; i++)
-        {
-            var uCol = U.GetColumn(i);
-            var vCol = V.GetColumn(i);
-            var outer = Matrix.OuterProduct(uCol, vCol) * SingularValues[i];
-            list.Add(outer);
-        }
+            list.Add(GetRank1Component(i));
         return list;
     }
+
+    public Matrix GetRank1Component(int index) =>
+        Matrix.OuterProduct(U.GetColumn(index), V.GetColumn(index)) * SingularValues[index];
 
     /// <summary>
     /// Computes the cumulative energy captured by each singular value.
@@ -161,11 +148,9 @@ public sealed class SvdResult
         int p = SingularValues.Length;
         if (p == 0) return Array.Empty<double>();
 
-        double total = 0.0;
-        foreach (var sv in SingularValues) total += sv * sv;
-
         var result = new double[p];
-        if (total < 1e-15)
+        double scale = SingularValues[0];
+        if (scale == 0.0)
         {
             Array.Fill(result, 100.0);
             return result;
@@ -174,9 +159,12 @@ public sealed class SvdResult
         double running = 0.0;
         for (int i = 0; i < p; i++)
         {
-            running += SingularValues[i] * SingularValues[i];
-            result[i] = (running / total) * 100.0;
+            double ratio = SingularValues[i] / scale;
+            running += ratio * ratio;
+            result[i] = running;
         }
+        for (int i = 0; i < p; i++)
+            result[i] = result[i] / running * 100.0;
         return result;
     }
 
